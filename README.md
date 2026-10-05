@@ -1,4 +1,4 @@
-# 🏃 Sport Data Solution — Real-Time Streaming & Lakehouse Pipeline
+# --- Sport Data Solution — Real-Time Streaming & Lakehouse Pipeline ---
 
 ### End-to-End Real-Time Data Streaming & Lakehouse Architecture
 
@@ -12,7 +12,7 @@
 
 ---
 
-## 🧭 What is this project?
+## --- What is this project? ---
 
 **Sport Data Solution** is a (fictional) startup that wants to reward employees
 for staying active. This repo contains the full data pipeline I built for
@@ -21,9 +21,9 @@ figures out who qualifies for two employee perks, and shows the results on
 a live dashboard — all automated, end to end.
 
 The two perks:
-- 🚲 **Mobility bonus** — +5% of annual gross salary for employees whose
+-  **Mobility bonus** — +5% of annual gross salary for employees whose
   commute is validated as genuinely active (walking, running, cycling...).
-- 🧘 **Wellness days** — paid time off for employees who hit a minimum
+-  **Wellness days** — paid time off for employees who hit a minimum
   number of sports activities per year.
 
 The whole point of a POC like this is to prove the pipeline **works, is
@@ -32,24 +32,24 @@ produce one static report.
 
 ---
 
-## 🏗️ Architecture
+## --- Architecture ---
 
 ```mermaid
 flowchart TD
-    A[📄 HR + Sports Excel files] --> G
-    G[🐍 generate_activities.py] --> B[(PostgreSQL<br/>activities table)]
+    A[ HR + Sports Excel files] --> G
+    G[ generate_activities.py] --> B[(PostgreSQL<br/>activities table)]
     B -->|CDC| C[Debezium]
     C --> D[[Redpanda topic<br/>sds.public.activities]]
     D --> E[streaming_bronze.py<br/>PySpark Structured Streaming]
     D --> F[notify_slack.py]
-    F --> S[💬 Slack notification]
+    F --> S[ Slack notification]
     E --> H[(Delta Lake · Bronze)]
     R[load_referentiel_rh.py<br/>+ Google Maps API] --> I[(Delta Lake · Referential)]
     H --> J[enrichment_gold.py]
     I --> J
-    P[⚙️ parametres.json] --> J
+    P[ parametres.json] --> J
     J --> K[(Delta Lake · Gold)]
-    K --> L[📊 Power BI Dashboard]
+    K --> L[ Power BI Dashboard]
     K --> Q[check_data_quality.py]
 ```
 
@@ -66,7 +66,7 @@ straight from it.
 
 ---
 
-## ⚙️ Tech stack
+## --- Tech stack ---
 
 | Layer | Tool | Role |
 |---|---|---|
@@ -83,7 +83,7 @@ straight from it.
 
 ---
 
-## 📂 Project structure
+## --- Project structure ---
 
 ```
 sport-data-solution/
@@ -110,7 +110,7 @@ sport-data-solution/
 
 ---
 
-## 🚀 Getting started
+## --- Getting started ---
 
 **Prerequisites**
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (with Docker Compose)
@@ -132,7 +132,7 @@ pip install -r requirements.txt
 
 ---
 
-## ▶️ Runbook — how to run the whole thing
+## ---  Runbook — how to run the whole thing ---
 
 ```bash
 # 1. Start the infrastructure (Postgres, Redpanda, Debezium, Spark)
@@ -166,7 +166,7 @@ the Delta Lake gold folder, no export needed.
 
 ---
 
-## 🎛️ Changing the business rules (no code required)
+## --- Changing the business rules (no code required) ---
 
 All the business logic lives in `spark_jobs/config/parametres.json`:
 
@@ -194,7 +194,7 @@ BI**, by design.
 
 ---
 
-## 🔒 Data privacy & security
+## --- Data privacy & security ---
 
 Since this pipeline touches sensitive HR data (salary, home address), a
 few things were non-negotiable:
@@ -210,7 +210,7 @@ few things were non-negotiable:
 
 ---
 
-## ✅ Data quality
+## --- Data quality ---
 
 Before any number reaches the dashboard, `check_data_quality.py` runs 11
 automated checks — no negative distances, no future dates, referential
@@ -219,17 +219,17 @@ and more. Current status: **11/11 passing**.
 
 ---
 
-## 📊 Example results
+## --- Example results ---
 
 On the simulated dataset (161 employees, ~6,600 generated activities):
 
-- 💶 ~172.5K€ total estimated mobility bonus budget
-- 🧘 540 wellness days granted
-- ✅ 0 distance anomalies detected
+-  ~172.5K€ total estimated mobility bonus budget
+-  540 wellness days granted
+-  0 distance anomalies detected
 
 ---
 
-## 🔭 Possible next steps
+## --- Possible next steps ---
 
 - Connect to the real Strava API instead of the simulator
 - Move the local Docker infrastructure to a managed cloud environment
@@ -239,6 +239,6 @@ On the simulated dataset (161 employees, ~6,600 generated activities):
 
 ## 👤 Author
 
-**Daniel** — Data Engineer
+**YAD** — Data Engineer
 Built as part of the OpenClassrooms Data Engineering program (Project 12 —
 Managing an Infrastructure Project).
