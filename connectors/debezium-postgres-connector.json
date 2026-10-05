@@ -1,0 +1,14 @@
+{
+  "name": "sds-postgres-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "database.hostname": "postgres",
+    "database.port": "5432",
+    "database.user": "sds_user",
+    "database.password": "sds_password",
+    "database.dbname": "sports_data",
+    "topic.prefix": "sds",
+    "table.include.list": "public.activities",
+    "plugin.name": "pgoutput"
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "taux_prime": 0.05,
+  "seuil_activites_bien_etre": 15,
+  "jours_bien_etre_accordes": 5
+}

@@ -1,0 +1,113 @@
+version: "3.8"
+
+services:
+  # "Data System" : base source où le simulateur Strava-like écrit les activités.
+  # wal_level=logical est nécessaire pour que Debezium puisse lire le flux de
+  # changements (CDC) sur la table activities.
+  postgres:
+    image: postgres:16
+    container_name: sds_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sds_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sds_password}
+      POSTGRES_DB: ${POSTGRES_DB:-sports_data}
+    command: ["postgres", "-c", "wal_level=logical"]
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/init_postgres.sql:/docker-entrypoint-initdb.d/init.sql
+
+  # Bus d'événements (topic "activités"). Compatible API Kafka, donc Debezium
+  # et Spark s'y connectent normalement.
+  redpanda:
+    image: redpandadata/redpanda:v24.1.13
+    container_name: sds_redpanda
+    restart: unless-stopped
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=1G
+      - --overprovisioned
+      - --node-id=0
+      - --check=false
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092
+      - --pandaproxy-addr=0.0.0.0:8082
+      - --advertise-pandaproxy-addr=redpanda:8082
+    ports:
+      - "9092:9092"
+      - "8082:8082"
+      - "9644:9644"
+
+  # Interface web pour monitorer les topics Redpanda (volumétrie, messages,
+  # consumer groups). Répond au besoin de monitoring du mail de Juliette.
+  redpanda-console:
+    image: redpandadata/console:v2.7.2
+    container_name: sds_redpanda_console
+    restart: unless-stopped
+    depends_on:
+      - redpanda
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+    ports:
+      - "8080:8080"
+
+  # Capture les changements (CDC) sur la table Postgres "activities" et les
+  # publie automatiquement dans un topic Redpanda.
+  connect:
+    image: debezium/connect:2.7.3.Final
+    container_name: sds_connect
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redpanda
+    environment:
+      BOOTSTRAP_SERVERS: redpanda:9092
+      GROUP_ID: sds_connect_group
+      CONFIG_STORAGE_TOPIC: sds_connect_configs
+      OFFSET_STORAGE_TOPIC: sds_connect_offsets
+      STATUS_STORAGE_TOPIC: sds_connect_status
+    ports:
+      - "8083:8083"
+
+  # Traitement du flux (streaming vers le bronze Delta Lake, puis job batch
+  # d'enrichissement vers le gold). En mode local[*], pas besoin de
+  # master/worker séparés pour un POC.
+  spark:
+    image: apache/spark:3.5.3-python3
+    container_name: sds_spark
+    restart: unless-stopped
+    user: root
+    environment:
+      SPARK_MODE: master
+    volumes:
+      - ./spark_jobs:/opt/spark_jobs
+      - ./data:/opt/data
+    ports:
+      - "4040:4040"
+    command: ["tail", "-f", "/dev/null"]
+  # Conteneur éphémère pour enregistrer automatiquement le connecteur Debezium
+  # Conteneur éphémère pour enregistrer automatiquement le connecteur Debezium
+  setup-debezium:
+    image: curlimages/curl
+    container_name: sds_setup_debezium
+    restart: "no"
+    depends_on:
+      - connect
+    volumes:
+      - ./connectors/debezium-postgres-connector.json:/config/debezium-postgres-connector.json
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Attente du demarrage de l'API Debezium..."
+        while [ "$(curl -s -o /dev/null -w "%{http_code}" http://connect:8083/connectors)" != "200" ]; do
+          sleep 5;
+        done
+        echo "API prete et operationnelle ! Envoi de la configuration..."
+        curl -X POST -H "Content-Type: application/json" -d @/config/debezium-postgres-connector.json http://connect:8083/connectors
+        echo "Connecteur ajoute avec succes !"
+volumes:
+  postgres_data:
