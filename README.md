@@ -131,7 +131,28 @@ pip install -r requirements.txt
 ```
 
 ---
+**Setup**
 
+```bash
+# 1. Clone the repository
+git clone [https://github.com/yad95/OC-Projet-12-Realtime-Streaming-Pipeline-Architecture.git](https://github.com/yad95/OC-Projet-12-Realtime-Streaming-Pipeline-Architecture.git)
+cd OC-Projet-12-Realtime-Streaming-Pipeline-Architecture
+
+# 2. Create and activate a virtual environment
+python -m venv venv
+
+# On Windows:
+venv\Scripts\activate
+# On macOS/Linux:
+source venv/bin/activate
+
+# 3. Install Python dependencies
+pip install -r requirements.txt
+
+# 4. Configure environment variables (API keys)
+cp .env.example .env
+# Open the new .env file and paste your Slack Webhook URL and Google Maps API Key.
+# Note: The pipeline will still run even if these keys are left empty.
 ## ---  Runbook — how to run the whole thing ---
 
 ```bash
