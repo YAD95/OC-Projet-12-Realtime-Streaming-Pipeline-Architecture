@@ -82,6 +82,46 @@ def envoyer_slack(message):
     if resp.status_code != 200:
         print(f"⚠️  Échec envoi Slack ({resp.status_code}): {resp.text}")
 
+# Plafonds réalistes par discipline (en mètres)
+PLAFONDS_METRES = {
+    "Course": 42000,
+    "Running": 42000,
+    "Course à pied": 42000,
+    "Marche": 25000,
+    "Walking": 25000,
+    "Vélo": 150000,
+    "Cyclisme": 150000,
+    "Bike": 150000,
+}
+PLAFOND_DEFAUT_METRES = 10000
+
+
+def detecter_anomalies(activite):
+    erreurs = []
+    id_salarie = activite.get("id_salarie")
+    sport = activite.get("sport_type")
+    distance_m = activite.get("distance_m")
+    debut_ts = activite.get("date_debut")
+
+    if not id_salarie:
+        erreurs.append("identifiant salarié absent")
+    if not sport:
+        erreurs.append("discipline non renseignée")
+
+    if distance_m is not None:
+        if distance_m < 0:
+            erreurs.append(f"distance négative ({distance_m} m)")
+        else:
+            plafond = PLAFONDS_METRES.get(sport, PLAFOND_DEFAUT_METRES)
+            if distance_m > plafond:
+                erreurs.append(
+                    f"distance irréaliste pour {sport} ({distance_m / 1000:.1f} km déclarés, max : {plafond / 1000:.0f} km)"
+                )
+
+    if debut_ts and (debut_ts / 1_000_000) > (datetime.now().timestamp() + 300):
+        erreurs.append("horodatage situé dans le futur")
+
+    return erreurs
 
 def main():
     print(f"Chargement de l'annuaire salariés depuis {REFERENTIEL_PATH}...")
@@ -108,9 +148,24 @@ def main():
         activite = payload.get("after")
         if not activite:
             continue
-        texte = formatter_message(activite, annuaire)
-        envoyer_slack(texte)
-        print(texte)
+        erreurs = detecter_anomalies(activite)
+
+        if erreurs:
+            id_sal = activite.get("id_salarie", "inconnu")
+            nom = annuaire.get(id_sal, f"Salarié #{id_sal}")
+            alerte = (
+                f"🚨 *[ALERTE MONITORING - QUARANTAINE]*\n"
+                f"Une activité anormale a été bloquée à l'ingestion.\n"
+                f"• *Collaborateur* : {nom}\n"
+                f"• *Anomalie(s)* : {', '.join(erreurs)}\n"
+                f"• *Statut* : Déroutée vers la table Quarantaine (exclue des calculs RH)."
+            )
+            envoyer_slack(alerte)
+            print(f"[ALERTE] {alerte}")
+        else:
+            texte = formatter_message(activite, annuaire)
+            envoyer_slack(texte)
+            print(texte)
 
 
 if __name__ == "__main__":
