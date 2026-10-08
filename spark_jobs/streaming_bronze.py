@@ -86,15 +86,67 @@ def main():
         .drop("op")
     )
 
-    query = (
-        activities.writeStream.format("delta")
+    # --- 1. DÉDUPLICATION TEMPS RÉEL (WATERMARK 2H) ---
+    # Élimine les doublons stricts (même salarié, même heure de départ, même sport)
+    # dans une fenêtre glissante de 2 heures en mémoire.
+    activities_dedup = (
+        activities
+        .withWatermark("date_debut", "2 hours")
+        .dropDuplicates(["id_salarie", "date_debut", "sport_type"])
+    )
+
+    # --- 2. RÈGLES DE CONTRÔLE QUALITÉ & ANTI-FRAUDE ---
+    regle_distance_par_sport = (
+        F.col("distance_m").isNull()
+        | (
+            (F.col("distance_m") >= 0)
+            & (
+                # Course à pied : max 42 km
+                (F.col("sport_type").isin("Course", "Running", "Course à pied") & (F.col("distance_m") <= 42000))
+                # Marche : max 25 km
+                | (F.col("sport_type").isin("Marche", "Walking") & (F.col("distance_m") <= 25000))
+                # Vélo : max 150 km
+                | (F.col("sport_type").isin("Vélo", "Cyclisme", "Bike") & (F.col("distance_m") <= 150000))
+                # Autres sports : tolérance max 10 km
+                | (
+                    ~F.col("sport_type").isin("Course", "Running", "Course à pied", "Marche", "Walking", "Vélo", "Cyclisme", "Bike")
+                    & (F.col("distance_m") <= 10000)
+                )
+            )
+        )
+    )
+
+    regle_valide = (
+        F.col("id_salarie").isNotNull()
+        & F.col("sport_type").isNotNull()
+        & regle_distance_par_sport
+        & (F.col("date_debut") <= F.current_timestamp())
+    )
+
+    # --- 3. AIGUILLAGE SUR LE FLUX DÉDOUBLONNÉ ---
+    valid_activities = activities_dedup.filter(regle_valide)
+    quarantine_activities = activities_dedup.filter(~regle_valide)
+
+    # Écriture Bronze officielle
+    query_valid = (
+        valid_activities.writeStream.format("delta")
         .option("checkpointLocation", args.checkpoint_path)
         .outputMode("append")
         .start(args.bronze_path)
     )
 
-    print(f"Écriture en continu vers {args.bronze_path} (checkpoint: {args.checkpoint_path})")
-    query.awaitTermination()
+    # Écriture Quarantaine
+    query_quarantine = (
+        quarantine_activities.writeStream.format("delta")
+        .option("checkpointLocation", args.checkpoint_path + "_quarantine")
+        .outputMode("append")
+        .start(args.bronze_path + "_quarantine")
+    )
+
+    print(f"Écriture active lancée :")
+    print(f" -> Bronze sain       : {args.bronze_path}")
+    print(f" -> Quarantaine       : {args.bronze_path}_quarantine")
+    spark.streams.awaitAnyTermination()
 
 
 if __name__ == "__main__":
